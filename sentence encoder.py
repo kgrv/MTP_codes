@@ -1,0 +1,194 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+from absl import logging
+
+import tensorflow as tf
+import tensorflow_hub as hub
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+import re
+import seaborn as sns
+
+
+# In[2]:
+
+
+codes=['ABT','AMZN','BCS','BP','C','F','GM','HMC','HSBC','JNJ','JPM','MRK','MSFT','PFE','SLB','TCEHY','TM','TSLA','UNH','XOM']
+
+
+# In[3]:
+
+
+file=pd.read_excel(r'data\trainingFolder\master_data.xlsx')
+
+
+# In[4]:
+
+
+article=[]
+for i in range(len(file)):
+    a=str(file.article[i])
+    y=""
+    for x in a.split("***"):
+        y=y+" "+x
+    article.append(str(y))
+file['article']=article
+File=pd.DataFrame()
+File['sentence']=article
+File['upintraday']=file['upintraday']
+train_df=File[:800]
+
+test_df=File[801:]
+test_df.head()
+
+
+# In[5]:
+
+
+# Training input on the whole training set with no limit on training epochs.
+train_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+    train_df, train_df["upintraday"], num_epochs=None, shuffle=True)
+
+# Prediction on the whole training set.
+predict_train_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+    train_df, train_df["upintraday"], shuffle=False)
+# Prediction on the test set.
+predict_test_input_fn = tf.compat.v1.estimator.inputs.pandas_input_fn(
+    test_df, test_df["upintraday"], shuffle=False)
+
+
+# In[6]:
+
+
+embedded_text_feature_column = hub.text_embedding_column(
+    key="sentence", 
+    module_spec="https://tfhub.dev/google/nnlm-en-dim128/1")
+
+
+# In[ ]:
+
+
+estimator = tf.estimator.DNNClassifier(
+    hidden_units=[500, 100],
+    feature_columns=[embedded_text_feature_column],
+    n_classes=2,
+    optimizer=tf.keras.optimizers.Adagrad(lr=0.003))
+
+
+# In[ ]:
+
+
+# Training for 5,000 steps means 640,000 training examples with the default
+# batch size. This is roughly equivalent to 25 epochs since the training dataset
+# contains 25,000 examples.
+estimator.train(input_fn=train_input_fn, steps=4400)
+
+
+# In[93]:
+
+
+train_eval_result = estimator.evaluate(input_fn=predict_train_input_fn)
+test_eval_result = estimator.evaluate(input_fn=predict_test_input_fn)
+
+print("Training set accuracy: {accuracy}".format(**train_eval_result))
+print("Test set accuracy: {accuracy}".format(**test_eval_result))
+
+
+# In[94]:
+
+
+
+
+
+# In[95]:
+
+
+train_eval_result = estimator.evaluate(input_fn=predict_train_input_fn)
+test_eval_result = estimator.evaluate(input_fn=predict_test_input_fn)
+
+print("Training set accuracy: {accuracy}".format(**train_eval_result))
+print("Test set accuracy: {accuracy}".format(**test_eval_result))
+
+
+# In[97]:
+
+
+def get_predictions(estimator, input_fn):
+    return [x["class_ids"][0] for x in estimator.predict(input_fn=input_fn)]
+
+LABELS = [
+    "downintraday", "upintraday"
+]
+
+# Create a confusion matrix on training data.
+cm = tf.math.confusion_matrix(train_df["upintraday"], 
+                              get_predictions(estimator, predict_train_input_fn))
+
+# Normalize the confusion matrix so that each row sums to 1.
+cm = tf.cast(cm, dtype=tf.float32)
+cm = cm / tf.math.reduce_sum(cm, axis=1)[:, np.newaxis]
+
+sns.heatmap(cm, annot=True, xticklabels=LABELS, yticklabels=LABELS);
+plt.xlabel("Predicted");
+plt.ylabel("True");
+
+
+# In[ ]:
+
+
+
+
+
+# In[36]:
+
+
+y=[]
+uD=[]
+for i in range(len(file)):
+    if(file['sentiment'][i]=="Positive"):
+        y.append(1)
+    elif(file['sentiment'][i]=="Negative"):
+        y.append(-1)
+    else:
+        y.append(0)
+    
+    if(file['upintraday'][i]==1):
+        uD.append(1)
+    elif(file['upintraday'][i]==0 and file['downintraday'][i]==1):
+        uD.append(-1)
+    else:
+        uD.append(0)
+
+
+# In[42]:
+
+
+plt.plot(y[:199])
+plt.plot(uD[:199])
+
+
+# In[40]:
+
+
+plt.plot(uD)
+
+
+# In[17]:
+
+
+file.columns
+
+
+# In[22]:
+
+
+x=file['article'][:20]
+y=file['sentiment'][:20]
+(x+y)[0]
+
